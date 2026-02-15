@@ -1,0 +1,7 @@
+[flake8]
+ignore = E501, W292, W504, E129, C901, W191, E101, E126, E117, E122, E125, E402, E131
+max-line-length = 180
+exclude =
+    __pycache__
+    .ignore
+max-complexity = 10
