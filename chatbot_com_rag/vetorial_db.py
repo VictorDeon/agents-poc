@@ -1,3 +1,8 @@
+"""Funções de indexação em bancos vetoriais (FAISS, Chroma, Pinecone).
+
+Este módulo encapsula a criação de índices e estratégias de cache de embeddings.
+"""
+
 from utils import load_environment_variables, get_env_var
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS, Chroma
@@ -7,32 +12,25 @@ from langchain.storage import LocalFileStore
 from langchain.embeddings import CacheBackedEmbeddings
 from pinecone import ServerlessSpec, Pinecone as PineconeClient
 from langchain.schema import Document
+import os
+import shutil
 import faiss
 
+# Garante que variáveis de ambiente (ex.: chaves de API) estejam disponíveis.
 load_environment_variables()
 
 
 def results_by_cache(embeddings: GoogleGenerativeAIEmbeddings) -> CacheBackedEmbeddings:
-    """
-    O Cache de Embeddings: é uma camada de armazenamento intermediária que armazena os vetores de embeddings
-    gerados a partir de textos ou outros dados. Ele é projetado para acelerar o processo de recuperação de
-    informações, evitando a necessidade de recalcular os embeddings para os mesmos dados repetidamente.
+    """Cria um cache persistente de embeddings para acelerar consultas.
 
-    Funciona da seguinte maneira:
-    1. Geração de Embeddings: Quando um texto é processado pela primeira vez, o modelo de embeddings gera um vetor numérico
-    que representa o significado do texto.
-    2. Armazenamento em Cache: Esse vetor é então armazenado em um cache (que pode ser na memória, em um
-    banco de dados ou em um sistema de arquivos).
-    3. Recuperação Rápida: Na próxima vez que o mesmo texto for processado, o sistema verifica primeiro o cache.
-    Se o vetor já estiver lá, ele é recuperado imediatamente, economizando tempo e recursos computacionais.
-    4. Atualização do Cache: Se o texto for modificado ou se um novo texto for processado, um novo vetor
-    será gerado e armazenado no cache para futuras consultas.
+    Args:
+        embeddings: Modelo de embeddings base (ex.: Gemini).
 
-    O uso do cache de embeddings é especialmente benéfico em aplicações onde os mesmos textos são processados repetidamente,
-    como em sistemas de busca, chatbots ou qualquer cenário onde a eficiência na recuperação de informações seja crucial.
-    Ele ajuda a melhorar significativamente a performance e a escalabilidade da aplicação.
+    Returns:
+        Wrapper com cache persistente para reutilizar vetores já calculados.
     """
 
+    # Pasta local para persistir vetores (reduz custo e latência).
     store = LocalFileStore("./embeddings_cache")
     cached_embeddings: CacheBackedEmbeddings = CacheBackedEmbeddings.from_bytes_store(
         embeddings,
@@ -44,107 +42,91 @@ def results_by_cache(embeddings: GoogleGenerativeAIEmbeddings) -> CacheBackedEmb
 
 
 def results_by_faissdb(company_documents: list[Document], embeddings: GoogleGenerativeAIEmbeddings) -> FAISS:
-    """
-    O que é o FAISS: É uma biblioteca de código para fazer buscas de similaridade
-    muito rápidas. Dado um item, ela encontra os mais parecidos dentro de um grande volume de dados.
+    """Cria um índice FAISS local a partir de documentos.
 
-    O FAISS oferece principalmente duas estratégias de busca:
-    1. Índice Flat (Busca Exata):
-        - Como funciona: Compara o seu item de busca com todos os outros itens no banco de dados, um por um.
-        - Vantagem: Precisão de 100%. Você tem a garantia de encontrar os resultados exatos.
-        - Desvantagem: Lento para muitos dados, pois o número de comparações é enorme.
+    Args:
+        company_documents: Lista de documentos para indexação.
+        embeddings: Modelo de embeddings usado para vetorizar textos.
 
-    2. Índice HNSW (Busca Aproximada):
-        - Como funciona: Cria uma estrutura de dados otimizada (um grafo) que permite pular comparações desnecessárias.
-        A busca é guiada de forma inteligente para a área mais provável dos resultados.
-        - Vantagem: Muito mais rápido, ideal para aplicações em tempo real com grandes volumes de dados.
-        - Desvantagem: A precisão não é 100%. A busca é muito boa, mas pode raramente deixar de fora o resultado mais exato.
-        Essa perda é geralmente aceitável em troca de velocidade.
-
-    Por padrão o LangChain usa o método Flat. Ele escolhe a segurança (100% de precisão) em vez
-    da velocidade, pois é mais simples e confiável para projetos iniciais e pequenos.
+    Returns:
+        Índice FAISS pronto para busca por similaridade.
     """
 
+    # Remove metadados complexos que o FAISS não consegue serializar.
     filtered_documents = filter_complex_metadata(company_documents)
 
-    dimension = 768  # Dimensão dos embeddings do modelo gemini-embedding-001 (768 valores por vetor)
-    neighbors = 32  # Número de vizinhos a serem considerados para consultas de similaridade
-    faiss.IndexHNSWFlat(dimension, neighbors)  # Usando HNSW para melhor desempenho em grandes volumes de dados
+    # Configuração do índice HNSW para ganho de performance em bases maiores.
+    dimension = 768  # Dimensão dos embeddings do modelo gemini-embedding-001.
+    neighbors = 32  # Número de vizinhos para o grafo HNSW.
+    faiss.IndexHNSWFlat(dimension, neighbors)  # Instancia HNSW (aproximado e rápido).
 
+    # Cria índice FAISS e persiste localmente para reuso.
     vector_store = FAISS.from_documents(filtered_documents, embedding=embeddings)
-    vector_store.save_local("faiss_index")  # Salva o índice FAISS localmente para persistência e reutilização futura
+    vector_store.save_local("faiss_index")
 
     return vector_store
 
 
 def results_by_chromadb(company_documents: list[Document], embeddings: GoogleGenerativeAIEmbeddings) -> Chroma:
-    """
-    O Chroma DB: O Banco de Dados Vetorial Simples e Poderoso para IA
-    Chroma é um banco de dados vetorial open-source, criado especialmente para
-    ser intuitivo e fácil de usar em aplicações de IA.
+    """Cria (ou recria) um índice ChromaDB persistente.
 
-    Seu grande diferencial é a combinação de duas funções essenciais:
-    1. Busca por Similaridade: Armazena e busca vetores (a representação numérica de textos, imagens e etc.)
-    para encontrar itens parecidos com base em seus significados ou conteúdos.
-    2. Filtros por Metadados: Permite associar informações adicionais (como datas, categorias, fontes, IDs de usuários)
-    a cada vetor. Com isso, você pode refinar suas buscas de forma precisa.
+    Args:
+        company_documents: Lista de documentos para indexação.
+        embeddings: Modelo de embeddings usado para vetorizar textos.
 
-    Na prática, isso permite consultas complexas como: "Encontre documentos parecidos com este texto sobre finanças,
-    mas que forma publicados apenas no último mês e que pertencem à categoria 'notícias'"
+    Returns:
+        Repositório Chroma pronto para busca e persistência em disco.
     """
 
+    # Remove metadados complexos para garantir serialização correta.
     filtered_documents = filter_complex_metadata(company_documents)
 
-    vector_store = Chroma.from_documents(filtered_documents, embeddings, persist_directory="./chroma_db")
+    # Pasta persistente do ChromaDB.
+    persist_directory = "./chroma_db"
+    should_reset = str(get_env_var("CHROMA_RESET", "false")).lower() in {"1", "true", "yes"}
+    if should_reset and os.path.isdir(persist_directory):
+        # Remove o índice para recriação limpa (útil em desenvolvimento).
+        shutil.rmtree(persist_directory)
+
+    # Cria e persiste o índice localmente.
+    vector_store = Chroma.from_documents(filtered_documents, embeddings, persist_directory=persist_directory)
 
     return vector_store
 
 
 def results_by_pinecone(company_documents: list[Document], embeddings: GoogleGenerativeAIEmbeddings) -> Pinecone:
-    """
-    O Pinecone: é um banco de dados vetorial de nível profissional, oferecido como
-    um serviço na nuvem (SaaS). totalmente gerenciado. Sua proposta é eliminar toda
-    a complexidade de infraestrutura, permitindo que as equipes foquem exclusivamente
-    no desenvolvimento da aplicação.
+    """Cria e popula um índice Pinecone gerenciado (SaaS).
 
-    É a escolha ideal para cenários que exigem:
-    1. Alta Escalabilidade: Projetado para crescer junto com sua aplicação suportando
-    bilhões de vetores e um alto volume de buscas sem degradação de performace.
-    2. Disponibilidade e Confiabilidade: Garante que o banco de dados esteja sempre online,
-    otimizado e seguro, algo crítico para produtos em produção.
-    3. Zero Manutenção: Você não precisa se preocupar com servidores, atualizações, backups ou otimizações.
-    O Pinecone cuida de tudo.
+    Args:
+        company_documents: Lista de documentos para indexação.
+        embeddings: Modelo de embeddings usado para vetorizar textos.
 
-    Em resumo, você obtém a potência de um banco vetorial de ponta através de uma simples API, sem os custos
-    e o trabalho de gerencia-lo,
-
-    Pré requisitos para conectar: Para usar o ponecone neste código você precisa:
-    1. Configurar sua chave de API: Garantir que a variavel de ambiente
-    PINECONE_API_KEY esteja definida com sua chave de API do Pinecone.
-    2. Criar um índice no Pinecone: Antes de executar o código, crie um
-    índice no painel do Pinecone, escolhendo o nome, a dimensão (768 para os
-    embeddings do modelo gemini-embedding-001) e a configuração de replicação
-    desejada.
+    Returns:
+        Repositório Pinecone pronto para busca por similaridade.
     """
 
+    # Remove metadados complexos que o Pinecone não suporta.
     filtered_documents = filter_complex_metadata(company_documents)
 
-    PINECONE_API_KEY = get_env_var('PINECONE_API_KEY')
+    # Recupera credencial e define nome do índice no Pinecone.
+    PINECONE_API_KEY = get_env_var("PINECONE_API_KEY")
     index_name = "pinecone-poc"  # Nome do índice criado no painel do Pinecone
 
+    # Cliente oficial para gerenciar índices.
     pinecone_client = PineconeClient(api_key=PINECONE_API_KEY)
 
+    # Especificação do índice serverless (nuvem/região).
     spec = ServerlessSpec(
         cloud="aws",  # Nuvem onde o índice será hospedado (gcp, aws ou azure)
-        region="us-east-1"  # Região onde o índice será hospedado (ex: us-west1, europe-west1, etc.)
+        region="us-east-1"  # Região onde o índice será hospedado.
     )
 
-    # Delete the index if it exists to ensure correct dimension
+    # Remove índice existente para garantir dimensão correta.
     if index_name in pinecone_client.list_indexes().names():
         pinecone_client.delete_index(index_name)
         print(f"Índice '{index_name}' deletado.")
 
-    # Create new index
+    # Cria novo índice com a dimensão do modelo escolhido.
     pinecone_client.create_index(
         name=index_name,
         dimension=3072,
@@ -153,6 +135,7 @@ def results_by_pinecone(company_documents: list[Document], embeddings: GoogleGen
     )
     print(f"Índice '{index_name}' criado com sucesso no Pinecone.")
 
+    # Popula o índice com documentos vetorizados.
     pinecone_db = Pinecone.from_documents(
         documents=filtered_documents,
         embedding=embeddings,

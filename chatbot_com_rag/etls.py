@@ -1,4 +1,12 @@
+"""ETLs para fontes PDF e banco (DuckDB).
+
+Este módulo extrai, transforma e prepara documentos com metadados e chunking
+para indexação em bancos vetoriais.
+"""
+
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 import duckdb
@@ -6,29 +14,38 @@ import pandas as pd
 from datetime import datetime
 
 
-def etl_pdf_process() -> list[Document]:
-    """
-    O PyPDFLoader é um carregador leve para PDFs baseado em pypdf.
-    Ele é rápido e evita dependências pesadas (como numba), sendo ideal para extrações simples.
+def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]:
+    """Extrai e transforma documentos de PDF em chunks com metadados.
+
+    Args:
+        llm: LLM opcional para gerar um resumo do PDF e adicionar como documento extra.
+
+    Returns:
+        Lista de documentos prontos para indexação.
     """
 
-    # Extração de dados
+    # Extração de dados do PDF com PyPDFLoader (simples e leve).
     loader = PyPDFLoader("chatbot_com_rag/assets/relatorio_vendas.pdf")
     docs = loader.load()
     print("Total de páginas extraídas:", len(docs))
 
-    # Transformação de dados (metadados adicionais)
+    # Transformação de dados (metadados adicionais por página).
     docs_with_metadata = []
     for i, doc in enumerate(docs):
+        # Normaliza numeração de páginas para iniciar em 1.
         page_number = (doc.metadata.get("page", i) or i) + 1
         metadata = {
             "id_doc": f"doc{i + 1}",
             "source": "relatorio_vendas.pdf",
             "page_number": page_number,
+            "categoria": "N/A",
+            "id_produto": "N/A",
+            "preco": "N/A",
             "timestamp": datetime.now().strftime("%Y-%m-%d"),
             "data_owner": "Departamento de Vendas",
             **doc.metadata.copy()
         }
+        # Cabeçalho textual facilita rastreamento do trecho na resposta.
         page_header = f"[Relatório de Vendas | Página {page_number}]\n"
         docs_with_metadata.append(
             Document(page_content=f"{page_header}{doc.page_content}", metadata=metadata)
@@ -37,26 +54,63 @@ def etl_pdf_process() -> list[Document]:
     print("Total de documentos com metadata:", len(docs_with_metadata))
 
     # Transformação de dados (chunking)
-    # Agora que temos os elementos do PDF, precisamos dividi-los em partes menores para o banco vetorial.
-    # Garantindo que não ultrapassem o limite de contexto do modelo de embeddings, que geralmente é de 512 a 1024 tokens.
+    # Dividimos o texto para respeitar limites de contexto dos embeddings.
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,  # Mais contexto por chunk para preservar trechos inteiros do PDF.
-        chunk_overlap=120,  # Sobreposição maior para manter continuidade entre páginas/trechos.
+        chunk_overlap=120,  # Sobreposição para manter continuidade entre trechos.
         separators=["\n\n", "\n", ". ", " ", ""],
     )
 
-    chuncks = text_splitter.split_documents(docs_with_metadata)
-    print("Total de chunks gerados:", len(chuncks))
+    chunks = text_splitter.split_documents(docs_with_metadata)
+    print("Total de chunks gerados:", len(chunks))
 
-    return chuncks
+    # Resumo opcional do PDF para fornecer visão geral ao modelo.
+    if llm is not None and chunks:
+        try:
+            pdf_text = "\n\n".join(doc.page_content for doc in chunks)
+            max_chars = 6000
+            if len(pdf_text) > max_chars:
+                pdf_text = pdf_text[:max_chars]
+
+            summary_prompt = ChatPromptTemplate.from_messages([
+                (
+                    "system",
+                    "Resuma o conteúdo do PDF de forma objetiva em português, destacando números e períodos importantes."
+                ),
+                ("human", "{text}")
+            ])
+            summary_messages = summary_prompt.format_messages(text=pdf_text)
+            summary_response = llm.invoke(summary_messages)
+            summary_text = summary_response.content.strip()
+
+            summary_metadata = {
+                "id_doc": "pdf_summary",
+                "source": "relatorio_vendas.pdf",
+                "page_number": 1,
+                "categoria": "N/A",
+                "id_produto": "N/A",
+                "preco": "N/A",
+                "timestamp": datetime.now().strftime("%Y-%m-%d"),
+                "data_owner": "Departamento de Vendas",
+                "type": "summary"
+            }
+            chunks.append(
+                Document(page_content=f"[Resumo do PDF]\n{summary_text}", metadata=summary_metadata)
+            )
+        except Exception as e:
+            print(f"Aviso: falha ao gerar resumo do PDF: {e}")
+
+    return chunks
 
 
-def etl_db_process():
+def etl_db_process() -> list[Document]:
+    """Extrai e transforma dados de um banco DuckDB em documentos.
+
+    Returns:
+        Lista de documentos prontos para indexação.
     """
-    O DuckDB é um banco de dados analítico embutido que pode ser usado para processar grandes volumes de dados de forma eficiente.
-    """
 
-    # Extração de dados
+    # Extração de dados: cria um banco em memória para exemplo.
     connection = duckdb.connect(database=':memory:')
     connection.execute("""
         CREATE TABLE produtos (
@@ -82,12 +136,13 @@ def etl_db_process():
         ]
     })
 
+    # Registra DataFrame e popula a tabela.
     connection.register("produtos_df", produtos_df)
     connection.execute("INSERT INTO produtos SELECT * FROM produtos_df")
 
     print("Tabela 'produtos' criada e populada no DuckDB.")
 
-    # Transformação de dados (metadados adicionais)
+    # Transformação de dados (metadados adicionais por produto).
     df_products = connection.execute("SELECT * FROM produtos").fetchdf()
 
     docs_with_metadata = []
@@ -98,6 +153,7 @@ def etl_db_process():
             "id_produto": row['id'],
             "categoria": row['categoria'],
             "preco": row['preco'],
+            "page_number": "N/A",
             "timestamp": datetime.now().strftime("%Y-%m-%d"),
             "data_owner": "Departamento de Vendas"
         }
@@ -105,15 +161,16 @@ def etl_db_process():
 
     print("Total de documentos com metadata:", len(docs_with_metadata))
 
+    # Fecha conexão após uso para liberar recursos.
     connection.close()
 
-    # Transformação de dados (chunking)
+    # Transformação de dados (chunking) para indexação.
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=500,
         chunk_overlap=50,
     )
 
-    chuncks = text_splitter.split_documents(docs_with_metadata)
-    print("Total de chunks gerados:", len(chuncks))
+    chunks = text_splitter.split_documents(docs_with_metadata)
+    print("Total de chunks gerados:", len(chunks))
 
-    return chuncks
+    return chunks
