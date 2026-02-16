@@ -28,14 +28,27 @@ from etls import etl_pdf_process, etl_db_process
 # Carrega variáveis de ambiente (ex.: chaves de API) antes de usar qualquer SDK.
 load_environment_variables()
 
+# Mantém histórico entre perguntas na mesma execução.
+session_store: dict[str, InMemoryChatMessageHistory] = {}
+_chat_chain: RunnableWithMessageHistory | None = None
+_guardrails: GuardrailsSecurity | None = None
 
-def main(question: str):
-    """Orquestra todo o fluxo de RAG, do ETL à resposta da pergunta."""
+
+def _get_session_history(session_id: str) -> InMemoryChatMessageHistory:
+    """Retorna (ou cria) o histórico da sessão informada."""
+    if session_id not in session_store:
+        session_store[session_id] = InMemoryChatMessageHistory()
+    return session_store[session_id]
+
+
+def _get_chat_chain() -> RunnableWithMessageHistory:
+    """Cria (uma vez) e retorna a cadeia RAG com memória."""
+    global _chat_chain
+    if _chat_chain is not None:
+        return _chat_chain
+
     # Recupera a chave de API do Gemini do ambiente. Falha cedo se ausente.
     GEMINI_API_KEY = get_env_var('GEMINI_API_KEY')
-
-    # Guardrails de segurança para validar entrada e saída.
-    guardrails = GuardrailsSecurity()
 
     # Instancia o modelo de embeddings do Google para vetorizar texto.
     # Esses vetores são necessários para busca semântica no banco vetorial.
@@ -145,38 +158,40 @@ def main(question: str):
     # Encadeia recuperação + resposta para formar o pipeline RAG.
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
-    # Armazena históricos por sessão para manter a conversa contínua.
-    session_store: dict[str, InMemoryChatMessageHistory] = {}
-
-    def get_session_history(session_id: str) -> InMemoryChatMessageHistory:
-        """Retorna (ou cria) o histórico da sessão informada."""
-        if session_id not in session_store:
-            session_store[session_id] = InMemoryChatMessageHistory()
-        return session_store[session_id]
-
     # Wrapper que injeta histórico e registra novas mensagens automaticamente.
-    chat_chain = RunnableWithMessageHistory(
+    _chat_chain = RunnableWithMessageHistory(
         rag_chain,
-        get_session_history,
+        _get_session_history,
         input_messages_key="input",  # Chave do texto da pergunta.
         history_messages_key="chat_history",  # Onde o histórico é lido/escrito.
         output_messages_key="answer",  # Campo de resposta no output.
     )
 
+    return _chat_chain
+
+
+def main(question: str):
+    """Orquestra todo o fluxo de RAG, do ETL à resposta da pergunta."""
+    global _guardrails
+    if _guardrails is None:
+        # Guardrails de segurança para validar entrada e saída.
+        _guardrails = GuardrailsSecurity()
+
+    chat_chain = _get_chat_chain()
+
     # Pergunta de exemplo (pode ser substituída por entrada do usuário).
-    print(f"\nPergunta: {question}")
     try:
-        question = guardrails.validate_input(question)
+        question = _guardrails.validate_input(question)
         # Executa o pipeline RAG com uma sessão fixa ("default").
         response = chat_chain.invoke(
             {"input": question},
             config={"configurable": {"session_id": "default"}}
         )
         # Resposta final do modelo com base nos documentos recuperados.
-        safe_answer = guardrails.validate_output(response['answer'])
+        safe_answer = _guardrails.validate_output(response['answer'])
         print(f"Resposta: {safe_answer}")
         # Documentos usados na resposta para auditoria/inspeção.
-        print(f"\nDocumentos utilizados: {len(response['context'])}")
+        # print(f"\nDocumentos utilizados: {len(response['context'])}")
     except Exception as e:
         # Captura qualquer erro de execução para facilitar debug.
         print(f"Erro ao processar a pergunta: {e}")
@@ -184,5 +199,14 @@ def main(question: str):
 
 if __name__ == "__main__":
     # Ponto de entrada para execução via CLI.
-    question = "Qual o produto mais caro vendido e qual é o preço dele?"
-    main(question)
+    print("Chatbot iniciado. Digite sua pergunta ou 'sair' para encerrar.")
+    while True:
+        question = input("\nPergunta: ").strip()
+        if not question:
+            print("Por favor, digite uma pergunta válida.")
+            continue
+        if question.lower() in {"sair", "exit", "quit"}:
+            print("Encerrando o chatbot.")
+            break
+
+        main(question)

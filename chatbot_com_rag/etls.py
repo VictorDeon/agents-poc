@@ -27,7 +27,7 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
     # Extração de dados do PDF com PyPDFLoader (simples e leve).
     loader = PyPDFLoader("chatbot_com_rag/assets/relatorio_vendas.pdf")
     docs = loader.load()
-    print("Total de páginas extraídas:", len(docs))
+    # print("Total de páginas extraídas:", len(docs))
 
     # Transformação de dados (metadados adicionais por página).
     docs_with_metadata = []
@@ -51,7 +51,7 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
             Document(page_content=f"{page_header}{doc.page_content}", metadata=metadata)
         )
 
-    print("Total de documentos com metadata:", len(docs_with_metadata))
+    # print("Total de documentos com metadata:", len(docs_with_metadata))
 
     # Transformação de dados (chunking)
     # Dividimos o texto para respeitar limites de contexto dos embeddings.
@@ -62,7 +62,7 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
     )
 
     chunks = text_splitter.split_documents(docs_with_metadata)
-    print("Total de chunks gerados:", len(chunks))
+    # print("Total de chunks gerados:", len(chunks))
 
     # Resumo opcional do PDF para fornecer visão geral ao modelo.
     if llm is not None and chunks:
@@ -140,7 +140,7 @@ def etl_db_process() -> list[Document]:
     connection.register("produtos_df", produtos_df)
     connection.execute("INSERT INTO produtos SELECT * FROM produtos_df")
 
-    print("Tabela 'produtos' criada e populada no DuckDB.")
+    # print("Tabela 'produtos' criada e populada no DuckDB.")
 
     # Transformação de dados (metadados adicionais por produto).
     df_products = connection.execute("SELECT * FROM produtos").fetchdf()
@@ -159,7 +159,7 @@ def etl_db_process() -> list[Document]:
         }
         docs_with_metadata.append(Document(page_content=row['descricao'], metadata=metadata))
 
-    print("Total de documentos com metadata:", len(docs_with_metadata))
+    # print("Total de documentos com metadata:", len(docs_with_metadata))
 
     # Fecha conexão após uso para liberar recursos.
     connection.close()
@@ -171,6 +171,6 @@ def etl_db_process() -> list[Document]:
     )
 
     chunks = text_splitter.split_documents(docs_with_metadata)
-    print("Total de chunks gerados:", len(chunks))
+    # print("Total de chunks gerados:", len(chunks))
 
     return chunks
