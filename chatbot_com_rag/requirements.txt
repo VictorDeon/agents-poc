@@ -12,3 +12,4 @@ scikit-learn==1.6.1
 unstructured==0.18.32
 duckdb==1.4.4
 pandas==3.0.0
+tiktoken==0.12.0

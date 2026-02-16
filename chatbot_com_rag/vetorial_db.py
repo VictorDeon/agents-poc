@@ -95,7 +95,7 @@ def results_by_chromadb(company_documents: list[Document], embeddings: GoogleGen
 
     filtered_documents = filter_complex_metadata(company_documents)
 
-    vector_store = Chroma.from_documents(filtered_documents, embeddings)
+    vector_store = Chroma.from_documents(filtered_documents, embeddings, persist_directory="./chroma_db")
     vector_store.persist()  # Salva os vetores e metadados no armazenamento do Chroma
 
     return vector_store
