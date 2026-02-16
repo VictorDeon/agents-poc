@@ -22,6 +22,8 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, PromptTemplate
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain_community.retrievers import BM25Retriever
+from langchain.retrievers import EnsembleRetriever
 from vetorial_db import results_by_chromadb
 from etls import etl_pdf_process
 
@@ -144,9 +146,22 @@ def _get_chat_chain() -> RunnableWithMessageHistory:
     )
 
     # Recuperador semântico com top-k documentos mais relevantes.
-    retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+    semantic_retriever = vector_store.as_retriever(search_kwargs={"k": 5})
+
+    # Lexical retriever (BM25) para complementar a busca semântica, especialmente útil para termos específicos.
+    lexical_retriever = BM25Retriever.from_documents(documents)
+    lexical_retriever.k = 5  # Configura para retornar os 5 documentos mais relevantes.
+
+    # Fazer o merge dos resultados dos dois recuperadores (semântico + lexical) para melhorar a cobertura.
+    # O EnsembleRetriever combina os resultados de ambos, dando mais peso ao semântico.
+    ensemble_retriever = EnsembleRetriever(
+        retrievers=[semantic_retriever, lexical_retriever],
+        weights=[0.7, 0.3]  # Dá mais peso ao recuperador semântico, mas ainda considera o lexical.
+    )
+
     # Recuperador que reescreve a pergunta considerando o histórico.
-    history_aware_retriever = create_history_aware_retriever(llm, retriever, contextualize_q_prompt)
+    history_aware_retriever = create_history_aware_retriever(llm, ensemble_retriever, contextualize_q_prompt)
+
     # Cadeia de QA que insere documentos no prompt de resposta.
     # Junta os documentos no prompt e faz a resposta
     question_answer_chain = create_stuff_documents_chain(
@@ -155,6 +170,7 @@ def _get_chat_chain() -> RunnableWithMessageHistory:
         document_prompt=document_prompt,
         document_variable_name="context"  # Nome esperado no prompt {context}.
     )
+
     # Encadeia recuperação + resposta para formar o pipeline RAG.
     rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
@@ -201,6 +217,11 @@ def main(question: str):
 
 
 if __name__ == "__main__":
+    """
+    Exemplo de perguntas:
+    - "Qual é o preço do Produto A?"
+    """
+
     # Ponto de entrada para execução via CLI.
     print("Chatbot iniciado. Digite sua pergunta ou 'sair' para encerrar.")
     while True:

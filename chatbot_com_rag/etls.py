@@ -4,7 +4,7 @@ Este módulo extrai, transforma e prepara documentos com metadados e chunking
 para indexação em bancos vetoriais.
 """
 
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import TextLoader, PyPDFDirectoryLoader
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -26,47 +26,36 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
         Lista de documentos prontos para indexação.
     """
 
-    base_dir = Path("chatbot_com_rag/aulas")
-    file_paths = sorted(list(base_dir.glob("*.pdf")))
+    loader = PyPDFDirectoryLoader("chatbot_com_rag/aulas", glob="*.pdf")
+    docs = loader.load()  # Carrega todos os PDFs da pasta.
 
-    if not file_paths:
-        return []
-
+    # Transformação de dados (metadados adicionais por página).
     docs_with_metadata: list[Document] = []
-    for file_path in file_paths:
-        # Extração de dados do PDF com PyPDFLoader (simples e leve).
-        loader = PyPDFLoader(file_path)
-        docs = loader.load()
-        # print(f"Total de páginas extraídas para {file_path.name}: {len(docs)}")
-
-        # Transformação de dados (metadados adicionais por página).
-        for i, doc in enumerate(docs):
-            # Normaliza numeração de páginas para iniciar em 1.
-            page_number = (doc.metadata.get("page", i) or i) + 1
-            metadata = {
-                "id_doc": f"doc{i + 1}",
-                "source": file_path.name,
-                "page_number": page_number,
-                "categoria": "N/A",
-                "id_produto": "N/A",
-                "preco": "N/A",
-                "timestamp": datetime.now().strftime("%Y-%m-%d"),
-                "data_owner": "Departamento de Vendas",
-                **doc.metadata.copy()
-            }
-            # Cabeçalho textual facilita rastreamento do trecho na resposta.
-            page_header = f"[Relatório de Vendas | Página {page_number}]\n"
-            docs_with_metadata.append(
-                Document(page_content=f"{page_header}{doc.page_content}", metadata=metadata)
-            )
-
-        # print(f"Total de documentos com metadata para {file_path.name}: {len(docs_with_metadata)}")
+    for i, doc in enumerate(docs):
+        # Normaliza numeração de páginas para iniciar em 1.
+        page_number = (doc.metadata.get("page", i) or i) + 1
+        metadata = {
+            "id_doc": f"doc{i + 1}",
+            "source": doc.metadata.get("source", "N/A"),
+            "page_number": page_number,
+            "categoria": "N/A",
+            "id_produto": "N/A",
+            "preco": "N/A",
+            "timestamp": datetime.now().strftime("%Y-%m-%d"),
+            "data_owner": "Departamento de Vendas",
+            **doc.metadata.copy()
+        }
+        # Cabeçalho textual facilita rastreamento do trecho na resposta.
+        page_header = f"[Relatório de Vendas | Página {page_number}]\n"
+        docs_with_metadata.append(
+            Document(page_content=f"{page_header}{doc.page_content}", metadata=metadata)
+        )
 
     # Transformação de dados (chunking)
     # Dividimos o texto para respeitar limites de contexto dos embeddings.
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,  # Mais contexto por chunk para preservar trechos inteiros do PDF.
-        chunk_overlap=120,  # Sobreposição para manter continuidade entre trechos.
+        chunk_size=1500,  # Mais contexto por chunk para preservar trechos inteiros do PDF.
+        chunk_overlap=200,  # Sobreposição para manter continuidade entre trechos.
         separators=["\n\n", "\n", ". ", " ", ""],
     )
 
@@ -90,7 +79,7 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
             summary_text = summary.content.strip()
             summary_metadata = {
                 "id_doc": "pdf_summary",
-                "source": file_path.name,
+                "source": doc.metadata.get("source", "N/A"),
                 "page_number": 1,
                 "categoria": "N/A",
                 "id_produto": "N/A",
