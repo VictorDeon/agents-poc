@@ -21,7 +21,8 @@ load_environment_variables()
 
 
 def results_by_cache(embeddings: GoogleGenerativeAIEmbeddings) -> CacheBackedEmbeddings:
-    """Cria um cache persistente de embeddings para acelerar consultas.
+    """
+    Cria um cache persistente de embeddings para acelerar consultas.
 
     Args:
         embeddings: Modelo de embeddings base (ex.: Gemini).
@@ -42,7 +43,8 @@ def results_by_cache(embeddings: GoogleGenerativeAIEmbeddings) -> CacheBackedEmb
 
 
 def results_by_faissdb(company_documents: list[Document], embeddings: GoogleGenerativeAIEmbeddings) -> FAISS:
-    """Cria um índice FAISS local a partir de documentos.
+    """
+    Cria um índice FAISS local a partir de documentos.
 
     Args:
         company_documents: Lista de documentos para indexação.
@@ -68,7 +70,8 @@ def results_by_faissdb(company_documents: list[Document], embeddings: GoogleGene
 
 
 def results_by_chromadb(company_documents: list[Document], embeddings: GoogleGenerativeAIEmbeddings) -> Chroma:
-    """Cria (ou recria) um índice ChromaDB persistente.
+    """
+    Cria (ou recria) um índice ChromaDB persistente.
 
     Args:
         company_documents: Lista de documentos para indexação.
@@ -95,7 +98,8 @@ def results_by_chromadb(company_documents: list[Document], embeddings: GoogleGen
 
 
 def results_by_pinecone(company_documents: list[Document], embeddings: GoogleGenerativeAIEmbeddings) -> Pinecone:
-    """Cria e popula um índice Pinecone gerenciado (SaaS).
+    """
+    Cria e popula um índice Pinecone gerenciado (SaaS).
 
     Args:
         company_documents: Lista de documentos para indexação.

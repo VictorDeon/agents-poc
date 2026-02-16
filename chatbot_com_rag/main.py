@@ -35,14 +35,21 @@ _guardrails: GuardrailsSecurity | None = None
 
 
 def _get_session_history(session_id: str) -> InMemoryChatMessageHistory:
-    """Retorna (ou cria) o histórico da sessão informada."""
+    """
+    Retorna (ou cria) o histórico da sessão informada.
+    """
+
     if session_id not in session_store:
         session_store[session_id] = InMemoryChatMessageHistory()
+
     return session_store[session_id]
 
 
 def _get_chat_chain() -> RunnableWithMessageHistory:
-    """Cria (uma vez) e retorna a cadeia RAG com memória."""
+    """
+    Cria (uma vez) e retorna a cadeia RAG com memória.
+    """
+
     global _chat_chain
     if _chat_chain is not None:
         return _chat_chain
@@ -164,7 +171,10 @@ def _get_chat_chain() -> RunnableWithMessageHistory:
 
 
 def main(question: str):
-    """Orquestra todo o fluxo de RAG, do ETL à resposta da pergunta."""
+    """
+    Orquestra todo o fluxo de RAG, do ETL à resposta da pergunta.
+    """
+
     global _guardrails
     if _guardrails is None:
         # Guardrails de segurança para validar entrada e saída.

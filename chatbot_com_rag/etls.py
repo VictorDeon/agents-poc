@@ -16,7 +16,8 @@ from pathlib import Path
 
 
 def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]:
-    """Extrai e transforma documentos de PDF em chunks com metadados.
+    """
+    Extrai e transforma documentos de PDF em chunks com metadados.
 
     Args:
         llm: LLM opcional para gerar um resumo do PDF e adicionar como documento extra.
