@@ -1,4 +1,4 @@
-from langchain_community.document_loaders import UnstructuredPDFLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 import duckdb
@@ -8,29 +8,31 @@ from datetime import datetime
 
 def etl_pdf_process() -> list[Document]:
     """
-    O UnstructuredPDFLoader é projetado para entender a estrutura de um PDF, como títulos, parágrafos, tabelas e imagens.
-    Ele pode extrair o conteúdo de forma organizada, mantendo a hierarquia e a formatação do documento.
-    Isso é especialmente útil para documentos complexos, onde a estrutura é importante para a compreensão do conteúdo.
-    Ele é ótimo para chunking, pois pode dividir o conteúdo em partes menores, como seções ou parágrafos, facilitando a análise
-    e o processamento posterior.
+    O PyPDFLoader é um carregador leve para PDFs baseado em pypdf.
+    Ele é rápido e evita dependências pesadas (como numba), sendo ideal para extrações simples.
     """
 
     # Extração de dados
-    loader = UnstructuredPDFLoader("chatbot_com_rag/assets/relatorio_vendas.pdf", mode="elements")
-    docs_unstructed = loader.load()
-    print("Total de elementos extraídos:", len(docs_unstructed))
+    loader = PyPDFLoader("chatbot_com_rag/assets/relatorio_vendas.pdf")
+    docs = loader.load()
+    print("Total de páginas extraídas:", len(docs))
 
     # Transformação de dados (metadados adicionais)
     docs_with_metadata = []
-    for i, doc in enumerate(docs_unstructed):
+    for i, doc in enumerate(docs):
+        page_number = (doc.metadata.get("page", i) or i) + 1
         metadata = {
             "id_doc": f"doc{i + 1}",
             "source": "relatorio_vendas.pdf",
+            "page_number": page_number,
             "timestamp": datetime.now().strftime("%Y-%m-%d"),
             "data_owner": "Departamento de Vendas",
             **doc.metadata.copy()
         }
-        docs_with_metadata.append(Document(page_content=doc.page_content, metadata=metadata))
+        page_header = f"[Relatório de Vendas | Página {page_number}]\n"
+        docs_with_metadata.append(
+            Document(page_content=f"{page_header}{doc.page_content}", metadata=metadata)
+        )
 
     print("Total de documentos com metadata:", len(docs_with_metadata))
 
@@ -38,8 +40,9 @@ def etl_pdf_process() -> list[Document]:
     # Agora que temos os elementos do PDF, precisamos dividi-los em partes menores para o banco vetorial.
     # Garantindo que não ultrapassem o limite de contexto do modelo de embeddings, que geralmente é de 512 a 1024 tokens.
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,  # Tamanho ideal para embeddings, considerando a média de tokens por palavra e a necessidade de contexto.
-        chunk_overlap=50,  # Sobreposição para manter o contexto entre os chunks, evitando perda de informações importantes.
+        chunk_size=800,  # Mais contexto por chunk para preservar trechos inteiros do PDF.
+        chunk_overlap=120,  # Sobreposição maior para manter continuidade entre páginas/trechos.
+        separators=["\n\n", "\n", ". ", " ", ""],
     )
 
     chuncks = text_splitter.split_documents(docs_with_metadata)
