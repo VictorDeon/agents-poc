@@ -23,7 +23,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, Prom
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.chat_history import InMemoryChatMessageHistory
 from vetorial_db import results_by_chromadb
-from etls import etl_pdf_process, etl_db_process
+from etls import etl_pdf_process
 
 # Carrega variáveis de ambiente (ex.: chaves de API) antes de usar qualquer SDK.
 load_environment_variables()
@@ -65,14 +65,7 @@ def _get_chat_chain() -> RunnableWithMessageHistory:
     )
 
     # Executa ETL dos PDFs (pode usar o LLM para limpeza/extração).
-    pdf_documents = etl_pdf_process(llm)
-    # Executa ETL de fontes estruturadas (ex.: banco de dados).
-    db_documents = etl_db_process()
-
-    # Consolida todos os documentos para indexação em uma única lista.
-    documents = []
-    documents += pdf_documents
-    documents += db_documents
+    documents = etl_pdf_process(llm)
 
     # Metadados obrigatórios para o prompt dos documentos.
     # Valores padrão evitam KeyError quando a fonte não fornece algum campo.
@@ -102,7 +95,7 @@ def _get_chat_chain() -> RunnableWithMessageHistory:
         doc.metadata = metadata
 
     # Log simples para visibilidade do volume indexado.
-    print("Total de documentos para indexação:", len(documents))
+    # print("Total de documentos para indexação:", len(documents))
 
     # Indexa documentos no ChromaDB e retorna o repositório vetorial.
     vector_store = results_by_chromadb(documents, embeddings)

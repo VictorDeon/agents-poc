@@ -25,7 +25,7 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
         Lista de documentos prontos para indexação.
     """
 
-    base_dir = Path("chatbot_com_rag/assets")
+    base_dir = Path("chatbot_com_rag/aulas")
     file_paths = sorted(list(base_dir.glob("*.pdf")))
 
     if not file_paths:
