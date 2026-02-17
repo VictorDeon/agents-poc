@@ -1,0 +1,1 @@
+Resuma o conteúdo do PDF de forma objetiva em português, destacando números e períodos importantes.

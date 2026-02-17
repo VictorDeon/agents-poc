@@ -9,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
+from utils import get_prompt
 from datetime import datetime
 from pathlib import Path
 
@@ -64,10 +65,7 @@ def etl_pdf_process(llm: ChatGoogleGenerativeAI | None = None) -> list[Document]
     summary_chunks = []
     if llm is not None and chunks:
         summary_prompt = ChatPromptTemplate.from_messages([
-            (
-                "system",
-                "Resuma o conteúdo do PDF de forma objetiva em português, destacando números e períodos importantes."
-            ),
+            ("system", get_prompt("document_summary.prompt.md")),
             ("human", "{doc_content}")
         ])
 
