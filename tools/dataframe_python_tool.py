@@ -1,6 +1,6 @@
 from langchain_experimental.tools import PythonAstREPLTool
 from langchain.tools import tool, ToolRuntime
-from dtos import MainContext, QuestionInputDTO, ResponseSchema
+from dtos import MainContext, QuestionInputDTO
 import pandas as pd
 
 
@@ -22,9 +22,4 @@ def dataframe_python_tool(question: str, runtime: ToolRuntime[MainContext]) -> P
 
     df = pd.read_csv('./assets/dados_entregas.csv')
 
-    return PythonAstREPLTool(
-        args_schema=QuestionInputDTO,
-        response_format=ResponseSchema,
-        return_direct=True,
-        locals={"df": df}
-    ).with_config({"configurable": {"thread_id": context.session_id}})
+    return PythonAstREPLTool(locals={"df": df}).with_config({"configurable": {"thread_id": context.session_id}})
