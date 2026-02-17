@@ -13,7 +13,7 @@ from utils import get_prompt
 from rags.etls import etl_pdf_process
 
 
-def rag_tool(question: str, session: InMemoryChatMessageHistory) -> str:
+def rag_tool(question: str, session: InMemoryChatMessageHistory, session_id: str) -> str:
     """
     Cria a ferramenta de RAG (Recuperação Augmentada por Geração) do agente.
     """
@@ -123,4 +123,7 @@ def rag_tool(question: str, session: InMemoryChatMessageHistory) -> str:
         output_messages_key="answer",  # Campo de resposta no output.
     )
 
-    return chain.invoke({"input": question})
+    return chain.invoke(
+        {"input": question},
+        config={"configurable": {"session_id": session_id}}
+    )

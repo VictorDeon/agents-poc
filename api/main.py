@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
-from uuid import uuid4
 import hashlib
 import hmac
 import json
@@ -86,7 +85,7 @@ async def lifespan(_: FastAPI):
     """
 
     load_environment_variables()
-    Agent(session_id=uuid4())
+    Agent()
 
 
 @app.get("/health")
@@ -123,7 +122,7 @@ async def receive_message(request: Request, payload: WhatsAppMessage) -> WhatsAp
     Recebe a mensagem do WhatsApp e responde usando o RAG.
     """
 
-    chat = Agent(session_id=payload.session_id or payload.from_number)
+    chat = Agent.get_instance(session_id=payload.session_id or payload.from_number)
 
     raw_body = await request.body()
     _verify_whatsapp_signature(raw_body, request.headers.get("X-Hub-Signature-256"))

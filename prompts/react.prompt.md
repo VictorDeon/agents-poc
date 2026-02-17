@@ -15,6 +15,11 @@ Observation: o resultado da ação
 Thought: Agora eu sei a resposta final
 Final Answer: a resposta final para a pergunta original
 
+Regras obrigatórias de formato:
+- Sempre escreva `Action:` seguido do nome exato da ferramenta.
+- Sempre escreva `Action Input:` na linha seguinte, com o argumento em JSON ou texto simples.
+- Nunca omita `Action Input:`.
+
 IMPORTANTE: Não invente a Observation. Aguarde o sistema retornar o resultado real da ação.
 
 Comece!

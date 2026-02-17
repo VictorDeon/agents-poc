@@ -14,7 +14,7 @@ def get_prompt(template_name: str) -> str:
     """
 
     # Define o loader para a pasta de prompts do projeto.
-    env = Environment(loader=FileSystemLoader("./prompts"))
+    env = Environment(loader=FileSystemLoader("prompts"))
     # Renderiza o template sem variáveis adicionais (render padrão).
     return env.get_template(template_name).render()
 

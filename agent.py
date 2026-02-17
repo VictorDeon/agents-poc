@@ -1,7 +1,8 @@
 from utils import load_environment_variables, get_env_var
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain.memory import ConversationBufferMemory
 from langchain.agents import Tool, create_react_agent, AgentExecutor
 from guardrails_security import GuardrailsSecurity
 from utils import get_prompt
@@ -22,21 +23,13 @@ class Agent:
     __instance: "Agent" = None
     __session_store: dict[str, InMemoryChatMessageHistory] = {}
 
-    def __new__(cls, *args, **kwargs):
+    def __init__(self) -> None:
         """
-        Garante que apenas uma instância do agente seja criada (singleton).
+        Inicializa o histórico da sessão.
         """
 
-        if cls.__instance is None:
-            cls.__instance = super(Agent, cls).__new__(cls)
-            cls.__instance.__initialize(*args, **kwargs)
-
-        return cls.__instance
-
-    def __initialize(self, session_id: str) -> None:
-        """
-        Inicializa o agente, configurando o pipeline de RAG e o histórico de mensagens.
-        """
+        if self.__instance is not None:
+            raise ValueError("O objeto já existe! utilize a função get_instance()")
 
         print("Inicializando agente")
 
@@ -44,27 +37,35 @@ class Agent:
         GEMINI_API_KEY = get_env_var('GEMINI_API_KEY')
 
         self.__guardrails = GuardrailsSecurity()  # Placeholder para futuras validações de entrada/saída.
-        self.__chain = self.__build_tool_agent()
         self.__llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash-lite",  # Modelo leve/rápido para conversação.
             temperature=0.1,  # Baixa aleatoriedade para respostas mais consistentes.
             api_key=GEMINI_API_KEY  # Credencial exigida pela API.
         )
-        self.__init__(session_id)
+        self.__chain: AgentExecutor = None
+        self.__session: InMemoryChatMessageHistory = None
+        self.__session_id: str = None
 
-    def __init__(self, session_id: str) -> None:
+    @staticmethod
+    def get_instance(session_id: str) -> "Agent":
         """
-        Inicializa o histórico da sessão.
+        Inicializa o agente, configurando o pipeline de RAG e o histórico de mensagens.
         """
+
+        if Agent.__instance is None:
+            Agent.__instance = Agent()
 
         print(f"Criando nova sessão de conversa com o agente '{session_id}'...")
 
-        self.session_id = session_id
+        Agent.__instance.__session_id = session_id
 
-        if session_id not in self.__session_store:
-            self.__session_store[session_id] = InMemoryChatMessageHistory()
+        if session_id not in Agent.__instance.__session_store:
+            Agent.__instance.__session_store[session_id] = InMemoryChatMessageHistory()
 
-        self.session = self.__session_store[session_id]
+        Agent.__instance.__session = Agent.__instance.__session_store[session_id]
+        Agent.__instance.__chain = Agent.__instance.__build_tool_agent()
+
+        return Agent.__instance
 
     def __build_tool_agent(self) -> AgentExecutor:
         """
@@ -74,7 +75,7 @@ class Agent:
         tools = [
             Tool(
                 name="Aulas RAG Answer",
-                func=lambda question: rag_tool(question, self.session),
+                func=lambda question: rag_tool(question, self.__session, self.__session_id),
                 description="""
                     Utilize esta ferramenta para responder perguntas usando os documentos do RAG (conteúdo de PDFs e dados).
                     Perguntas referentes os tópicos: Arquitera de RAG, Armazenamento Vetorial, Embeddings,
@@ -95,7 +96,7 @@ class Agent:
                 """
             ),
             Tool(
-                ame="Statistical Summary",
+                name="Statistical Summary",
                 func=lambda question: statistical_summary_tool(question),
                 description="""
                     Utilize esta ferramenta sempre que o usuário solicitar um
@@ -137,16 +138,24 @@ class Agent:
             )
         ]
 
-        prompt_react_template = PromptTemplate(
-            template=get_prompt("prompts", "prompt_react.md"),
-            input_variables=["tools", "tool_names", "input", "agent_scratchpad"]
-        )
+        prompt_react_template = ChatPromptTemplate.from_messages([
+            ("system", get_prompt("react.prompt.md")),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("user", "{input}")
+        ])
 
         agent = create_react_agent(llm=self.__llm, tools=tools, prompt=prompt_react_template)
+
+        memory = ConversationBufferMemory(
+            chat_memory=self.__session,
+            return_messages=True,
+            memory_key="chat_history"
+        )
 
         return AgentExecutor(
             agent=agent,
             tools=tools,
+            memory=memory,
             verbose=True,
             handle_parsing_errors=True,
             max_iterations=5,
@@ -161,7 +170,7 @@ class Agent:
         self.__guardrails.validate_input(question)
         response = self.__chain.invoke(
             {"input": question},
-            config={"configurable": {"session_id": self.session_id}}
+            config={"configurable": {"session_id": self.__session_id}}
         )
         self.__guardrails.validate_output(response["output"])
         return response["output"]

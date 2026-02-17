@@ -6,7 +6,7 @@ def main(question: str):
     Orquestra todo o fluxo de RAG, do ETL à resposta da pergunta.
     """
 
-    agent = Agent(session_id="default")
+    agent = Agent.get_instance(session_id="default")
 
     try:
         response = agent.invoke(question)
