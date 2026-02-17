@@ -219,7 +219,8 @@ def main(question: str):
 if __name__ == "__main__":
     """
     Exemplo de perguntas:
-    - "Qual é o preço do Produto A?"
+    - "O que é RAG"
+    - "para que ela serve?"
     """
 
     # Ponto de entrada para execução via CLI.

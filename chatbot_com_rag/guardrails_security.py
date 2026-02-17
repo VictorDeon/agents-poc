@@ -99,6 +99,7 @@ class GuardrailsSecurity:
 
         for pattern in self._blocked_regex:
             if pattern.search(normalized):
+                print(f"Saída bloqueada por regex: {pattern.pattern}")
                 raise ValueError("Saída contém possível informação sensível.")
 
         return normalized
