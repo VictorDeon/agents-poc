@@ -123,8 +123,8 @@ async def receive_message(request: Request, payload: WhatsAppMessage) -> WhatsAp
 
     chat = Agent.get_instance(session_id=payload.session_id or payload.from_number)
 
-    # raw_body = await request.body()
-    # _verify_whatsapp_signature(raw_body, request.headers.get("X-Hub-Signature-256"))
+    raw_body = await request.body()
+    _verify_whatsapp_signature(raw_body, request.headers.get("X-Hub-Signature-256"))
 
     session_id = payload.session_id or payload.from_number
     _log_event("message_received", from_number=payload.from_number, session_id=session_id)
