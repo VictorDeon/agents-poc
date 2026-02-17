@@ -15,8 +15,8 @@ import json
 import logging
 import time
 
-from chatbot_com_rag.utils import get_env_var, load_environment_variables
-from chatbot_com_rag.chat import ChatbotSingleton
+from agent import Agent
+from utils import load_environment_variables, get_env_var
 
 app = FastAPI(title="Chatbot RAG (WhatsApp Simulado)")
 
@@ -90,7 +90,7 @@ async def lifespan(_: FastAPI):
     """
 
     load_environment_variables()
-    ChatbotSingleton(session_id="default")
+    Agent(session_id="default")
 
 
 @app.get("/health")
@@ -127,7 +127,7 @@ async def receive_message(request: Request, payload: WhatsAppMessage) -> WhatsAp
     Recebe a mensagem do WhatsApp e responde usando o RAG.
     """
 
-    chat = ChatbotSingleton(session_id=payload.session_id or payload.from_number)
+    chat = Agent(session_id=payload.session_id or payload.from_number)
 
     # raw_body = await request.body()
     # _verify_whatsapp_signature(raw_body, request.headers.get("X-Hub-Signature-256"))
@@ -136,12 +136,8 @@ async def receive_message(request: Request, payload: WhatsAppMessage) -> WhatsAp
     _log_event("message_received", from_number=payload.from_number, session_id=session_id)
 
     try:
-        question = chat.guardrails.validate_input(payload.text)
-        response = chat.chain.invoke(
-            {"input": question},
-            config={"configurable": {"session_id": session_id}},
-        )
-        answer = chat.guardrails.validate_output(response["answer"])
+        response: dict = chat.invoke(payload.text)
+        answer = response.get("answer", "").strip()
         documents_used = len(response.get("context", []))
         _log_event("message_answered", from_number=payload.from_number, session_id=session_id, documents_used=documents_used)
         return WhatsAppReply(to=payload.from_number, reply=answer, documents_used=documents_used)

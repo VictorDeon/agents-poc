@@ -1,9 +1,3 @@
-"""ETLs para fontes PDF e banco (DuckDB).
-
-Este módulo extrai, transforma e prepara documentos com metadados e chunking
-para indexação em bancos vetoriais.
-"""
-
 from langchain_community.document_loaders import TextLoader, PyPDFDirectoryLoader
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI

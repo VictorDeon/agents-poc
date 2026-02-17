@@ -1,9 +1,4 @@
-"""Funções de indexação em bancos vetoriais (FAISS, Chroma, Pinecone).
-
-Este módulo encapsula a criação de índices e estratégias de cache de embeddings.
-"""
-
-from utils import load_environment_variables, get_env_var
+from utils import get_env_var
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS, Chroma
 from langchain_community.vectorstores.utils import filter_complex_metadata
@@ -15,9 +10,6 @@ from langchain.schema import Document
 import os
 import shutil
 import faiss
-
-# Garante que variáveis de ambiente (ex.: chaves de API) estejam disponíveis.
-load_environment_variables()
 
 
 def results_by_cache(embeddings: GoogleGenerativeAIEmbeddings) -> CacheBackedEmbeddings:
