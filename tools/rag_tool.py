@@ -1,6 +1,7 @@
 from utils import get_env_var
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.chat_history import InMemoryChatMessageHistory
+from langchain.tools import tool
 from langchain.chains.history_aware_retriever import create_history_aware_retriever
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -13,9 +14,14 @@ from utils import get_prompt
 from rags.etls import etl_pdf_process
 
 
+@tool
 def rag_tool(question: str, session: InMemoryChatMessageHistory, session_id: str) -> str:
     """
-    Cria a ferramenta de RAG (Recuperação Augmentada por Geração) do agente.
+    Utilize esta ferramenta para responder perguntas usando os documentos do RAG (conteúdo de PDFs e dados).
+    Perguntas referentes os tópicos: Arquitera de RAG, Armazenamento Vetorial, Embeddings,
+    Pipeline de dados, Cadeias de Conversação, LLMs, Avaliação com LangSmith e RAGAS,
+    Hybrid Search e técnicas Avançadas de RAG devem ser respondidas utilizando esta ferramenta,
+    que tem acesso ao conteúdo dos documentos.
     """
 
     # Recupera a chave de API do Gemini do ambiente. Falha cedo se ausente.

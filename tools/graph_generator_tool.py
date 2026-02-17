@@ -1,12 +1,14 @@
 from utils import get_prompt, get_env_var
+from langchain.tools import tool
 from langchain_core.output_parsers import StrOutputParser
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
 
+@tool
 def graph_generator_tool(question: str) -> plt.Figure:
     """
     Utilize esta ferramenta sempre que o usuário solicitar um gráfico a partir
@@ -25,6 +27,9 @@ def graph_generator_tool(question: str) -> plt.Figure:
     - "represente graficamente"
 
     Entre outros pedidos e palavras-chave que indicam a necessidade de gerar um gráfico a partir dos dados do DataFrame.
+
+    Args:
+        question: A pergunta do usuário relacionada à geração de gráficos a partir do DataFrame.
     """
 
     GROQ_API_KEY = get_env_var('GROQ_API_KEY')
