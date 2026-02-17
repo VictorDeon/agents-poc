@@ -1,25 +1,14 @@
 from utils import get_prompt, get_env_var
-from pydantic import BaseModel, Field
 from langchain.tools import tool, ToolRuntime
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from dtos import MainContext
-from datetime import datetime
-from uuid import uuid4
+from dtos import MainContext, QuestionInputDTO
 from langchain_groq import ChatGroq
 import pandas as pd
 
 
-class DataFrameInformationsToolInput(BaseModel):
-    """
-    Esquema de entrada para a ferramenta de informações do DataFrame.
-    """
-
-    question: str = Field(..., description="A pergunta do usuário relacionada a informações gerais do DataFrame.")
-
-
-@tool(args_schema=DataFrameInformationsToolInput)
-def dataframe_informations_tool(question: str, runtime: ToolRuntime) -> str:
+@tool(args_schema=QuestionInputDTO)
+def dataframe_informations_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
     """
     Utilize esta ferramenta sempre que o usuário solicitar informações gerais
     sobre o DataFrame, incluindo número de colunas e linhas, nomes das colunas,
@@ -31,15 +20,7 @@ def dataframe_informations_tool(question: str, runtime: ToolRuntime) -> str:
         runtime: O contexto de execução da ferramenta, fornecido pelo agente.
     """
 
-    context: MainContext = runtime.context
-    store = runtime.store
-    history = runtime.store.search(
-        ("sessions", context.session_id, "questions"),
-        query="recupere as últimas 3 perguntas",
-        filter={"tool": "dataframe_informations_tool"},
-        limit=3
-    )
-    print(f"Histórico de perguntas da sessão {context.session_id} anteriores nesta sessão: {history}")
+    context = runtime.context
 
     GROQ_API_KEY = get_env_var('GROQ_API_KEY')
 
@@ -66,26 +47,17 @@ def dataframe_informations_tool(question: str, runtime: ToolRuntime) -> str:
 
     chain = response_template | llm | StrOutputParser()
 
-    response = chain.invoke({
-        "question": question,
-        "shape": shape,
-        "columns": columns,
-        "nulls": nulls,
-        "nulls_str": nulls_str,
-        "duplicates": duplicates
-    })
-
-    # Armazena a última pergunta para contexto futuro.
-    store.put(
-        namespace=("sessions", context.session_id, "questions"),
-        key=f"qid_{uuid4()}",
-        value={
+    response = chain.invoke(
+        {
             "question": question,
-            "answer": response,
-            "tool": "dataframe_informations_tool",
-            "created_at": datetime.now().isoformat()
+            "shape": shape,
+            "columns": columns,
+            "nulls": nulls,
+            "nulls_str": nulls_str,
+            "duplicates": duplicates
         },
-        index=["tool", "created_at"]
+        config={"configurable": {"thread_id": context.session_id}},
+        context=context
     )
 
     return response

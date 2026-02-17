@@ -1,10 +1,11 @@
 from langchain_experimental.tools import PythonAstREPLTool
-from langchain.tools import tool
+from langchain.tools import tool, ToolRuntime
+from dtos import MainContext, QuestionInputDTO, ResponseSchema
 import pandas as pd
 
 
-@tool
-def dataframe_python_tool() -> PythonAstREPLTool:
+@tool(args_schema=QuestionInputDTO)
+def dataframe_python_tool(runtime: ToolRuntime[MainContext]) -> PythonAstREPLTool:
     """
     Utilize esta ferramenta sempre que o usuário solicitar cálculos,
     consultas ou transformações específicas usando Python diretamente
@@ -15,5 +16,12 @@ def dataframe_python_tool() -> PythonAstREPLTool:
     ou geração de gráficos — nesses casos, use as ferramentas apropriadas.
     """
 
+    context = runtime.context
+
     df = pd.read_csv('./assets/dados_entregas.csv')
-    return PythonAstREPLTool(locals={"df": df})
+    return PythonAstREPLTool(
+        args_schema=QuestionInputDTO,
+        response_format=ResponseSchema,
+        return_direct=True,
+        locals={"df": df}
+    ).with_config({"configurable": {"thread_id": context.session_id}})

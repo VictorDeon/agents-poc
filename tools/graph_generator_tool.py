@@ -1,15 +1,16 @@
 from utils import get_prompt, get_env_var
-from langchain.tools import tool
+from langchain.tools import tool, ToolRuntime
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
+from dtos import MainContext, QuestionInputDTO
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 
 
-@tool
-def graph_generator_tool(question: str) -> plt.Figure:
+@tool(args_schema=QuestionInputDTO)
+def graph_generator_tool(question: str, runtime: ToolRuntime[MainContext]) -> plt.Figure:
     """
     Utilize esta ferramenta sempre que o usuário solicitar um gráfico a partir
     de um DataFrame pandas (`df`) com base em uma instrução do usuário. A instrução
@@ -31,6 +32,8 @@ def graph_generator_tool(question: str) -> plt.Figure:
     Args:
         question: A pergunta do usuário relacionada à geração de gráficos a partir do DataFrame.
     """
+
+    context = runtime.context
 
     GROQ_API_KEY = get_env_var('GROQ_API_KEY')
 
@@ -54,11 +57,15 @@ def graph_generator_tool(question: str) -> plt.Figure:
 
     chain = response_template | llm | StrOutputParser()
 
-    response_code = chain.invoke({
-        "question": question,
-        "columns": "\n".join(columns),
-        "sample": samples
-    })
+    response_code = chain.invoke(
+        {
+            "question": question,
+            "columns": "\n".join(columns),
+            "sample": samples
+        },
+        config={"configurable": {"thread_id": context.session_id}},
+        context=context
+    )
 
     clean_code = response_code.replace("```python", "").replace("```", "").strip()
 

@@ -3,7 +3,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.store.memory import InMemoryStore
 from langchain.agents import create_agent
 from guardrails_security import GuardrailsSecurity
-from dtos import MainContext
+from langgraph.checkpoint.memory import InMemorySaver
+from dtos import MainContext, ResponseSchema
 from utils import get_prompt
 from tools import (
     dataframe_informations_tool,
@@ -40,9 +41,9 @@ class Agent:
             temperature=0.1,  # Baixa aleatoriedade para respostas mais consistentes.
             api_key=GEMINI_API_KEY  # Credencial exigida pela API.
         )
-        self.__chain = None
         self.__session: InMemoryStore = None
         self.__session_id: str = None
+        self.__chain = self.__build_tool_agent()
 
     @staticmethod
     def get_instance(session_id: str) -> "Agent":
@@ -61,7 +62,6 @@ class Agent:
             Agent.__instance.__session_store[session_id] = InMemoryStore()
 
         Agent.__instance.__session = Agent.__instance.__session_store[session_id]
-        Agent.__instance.__chain = Agent.__instance.__build_tool_agent()
 
         return Agent.__instance
 
@@ -77,18 +77,16 @@ class Agent:
             dataframe_python_tool
         ]
 
+        checkpointer = InMemorySaver()
+
         return create_agent(
             self.__llm,
             tools=tools,
-            debug=True,  # Habilita logs detalhados para depuração.
-            system_prompt="""
-                Você é um assistente inteligente especializado em responder perguntas.
-                Utilize as ferramentas disponíveis para fornecer respostas precisas e
-                informativas de acordo com a pergunta feita. Mantenha as respostas claras
-                e concisas, focando nas informações mais relevantes para a pergunta do usuário.
-            """,
+            system_prompt=get_prompt('agent_system.prompt.md'),
             context_schema=MainContext,
-            store=self.__session
+            store=self.__session,
+            response_format=ResponseSchema,
+            checkpointer=checkpointer
         )
 
     def invoke(self, question: str) -> str:
@@ -99,7 +97,9 @@ class Agent:
         self.__guardrails.validate_input(question)
         response = self.__chain.invoke(
             {"messages": [{"role": "user", "content": question}]},
+            config={"configurable": {"thread_id": self.__session_id}},
             context=MainContext(session_id=self.__session_id)
         )
-        # self.__guardrails.validate_output(response)
-        return response
+        structured_response: ResponseSchema = response["structured_response"]
+        self.__guardrails.validate_output(structured_response.answer)
+        return structured_response.answer
