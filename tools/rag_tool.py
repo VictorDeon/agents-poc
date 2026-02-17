@@ -23,6 +23,8 @@ def rag_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
     que tem acesso ao conteúdo dos documentos.
     """
 
+    print(f"Entrei na ferramenta 'rag_tool' com a pergunta: \"{question}\"")
+
     context = runtime.context
 
     # Recupera a chave de API do Gemini do ambiente. Falha cedo se ausente.

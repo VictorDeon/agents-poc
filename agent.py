@@ -4,6 +4,8 @@ from langgraph.store.memory import InMemoryStore
 from langchain.agents import create_agent
 from guardrails_security import GuardrailsSecurity
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain.agents.middleware import ModelRequest, dynamic_prompt
+from langchain.agents.middleware import ModelCallLimitMiddleware
 from dtos import MainContext, ResponseSchema
 from utils import get_prompt
 from tools import (
@@ -14,6 +16,37 @@ from tools import (
     multimodal_inputs_tool,
     rag_tool
 )
+
+
+@dynamic_prompt
+def agent_system_prompt(request: ModelRequest) -> str:
+    """
+    Middleware para injetar o prompt do sistema dinamicamente, permitindo personalização
+    com base no contexto da conversa (ex.: sentimento do usuário).
+    """
+
+    sentiment = request.runtime.context.sentiment
+
+    # Exemplo de personalização: ajustar o tom do agente com base no sentimento detectado.
+    tone_instruction = "Tom de Voz: "
+    if sentiment == "negative":
+        tone_instruction += "Responda de forma empática e compreensiva."
+    elif sentiment == "positive":
+        tone_instruction += "Mantenha um tom entusiástico e amigável."
+    elif sentiment == "expert":
+        tone_instruction += "Responda de forma técnica e detalhada, adequada para um público especializado."
+    elif sentiment == "beginner":
+        tone_instruction += "Responda de forma simples e didática, adequada para um público iniciante com analogias simples."
+    elif sentiment == "baby":
+        tone_instruction += "Responda de forma extremamente simples e lúdica, adequada para uma criança pequena, usando analogias divertidas e linguagem muito acessível."
+    else:
+        tone_instruction += "Responda de forma clara e profissional."
+
+    # Carrega o prompt base do sistema e injeta a instrução de tom personalizada.
+    base_prompt = get_prompt('agent_system.prompt.md')
+    full_prompt = f"{base_prompt}\n\n{tone_instruction}"
+
+    return full_prompt
 
 
 class Agent:
@@ -86,8 +119,15 @@ class Agent:
         return create_agent(
             self.__llm,
             tools=tools,
-            system_prompt=get_prompt('agent_system.prompt.md'),
             context_schema=MainContext,
+            middleware=[
+                agent_system_prompt,
+                ModelCallLimitMiddleware(
+                    thread_limit=10,     # Limite de 10 chamadas por thread para evitar loops infinitos.
+                    run_limit=5,         # Limite de 5 chamadas por execução do agente para evitar abusos.
+                    exit_behavior="end"  # Se os limites forem atingidos, o agente responderá com uma mensagem de encerramento e não fará mais chamadas ao modelo.
+                )
+            ],
             store=self.__session,
             response_format=ResponseSchema,
             checkpointer=checkpointer
@@ -102,7 +142,7 @@ class Agent:
         response = self.__chain.invoke(
             {"messages": [{"role": "user", "content": question}]},
             config={"configurable": {"thread_id": self.__session_id}},
-            context=MainContext(session_id=self.__session_id)
+            context=MainContext(session_id=self.__session_id, sentiment="baby")
         )
         structured_response: ResponseSchema = response["structured_response"]
         self.__guardrails.validate_output(structured_response.answer)

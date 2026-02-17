@@ -13,6 +13,11 @@ class MainContext(BaseModel):
         description="Identificador único para a sessão de conversa do agente."
     )
 
+    sentiment: str = Field(
+        None,
+        description="Sentimento detectado na pergunta do usuário, útil para personalizar respostas."
+    )
+
 
 class QuestionInputDTO(BaseModel):
     """
