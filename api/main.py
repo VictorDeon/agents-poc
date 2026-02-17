@@ -1,14 +1,10 @@
-"""API FastAPI que simula integração com a API do WhatsApp.
-
-Baseada no pipeline RAG em chatbot_com_rag.
-"""
-
 from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
+from uuid import uuid4
 import hashlib
 import hmac
 import json
@@ -90,7 +86,7 @@ async def lifespan(_: FastAPI):
     """
 
     load_environment_variables()
-    Agent(session_id="default")
+    Agent(session_id=uuid4())
 
 
 @app.get("/health")
@@ -129,8 +125,8 @@ async def receive_message(request: Request, payload: WhatsAppMessage) -> WhatsAp
 
     chat = Agent(session_id=payload.session_id or payload.from_number)
 
-    # raw_body = await request.body()
-    # _verify_whatsapp_signature(raw_body, request.headers.get("X-Hub-Signature-256"))
+    raw_body = await request.body()
+    _verify_whatsapp_signature(raw_body, request.headers.get("X-Hub-Signature-256"))
 
     session_id = payload.session_id or payload.from_number
     _log_event("message_received", from_number=payload.from_number, session_id=session_id)

@@ -38,19 +38,19 @@ class Agent:
         Inicializa o agente, configurando o pipeline de RAG e o histórico de mensagens.
         """
 
-        print(f"Inicializando chatbot com sessão '{session_id}'...")
+        print("Inicializando agente")
 
         load_environment_variables()
         GEMINI_API_KEY = get_env_var('GEMINI_API_KEY')
 
         self.__guardrails = GuardrailsSecurity()  # Placeholder para futuras validações de entrada/saída.
-        self.__session_store[session_id] = InMemoryChatMessageHistory()
         self.__chain = self.__build_tool_agent()
         self.__llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash-lite",  # Modelo leve/rápido para conversação.
             temperature=0.1,  # Baixa aleatoriedade para respostas mais consistentes.
             api_key=GEMINI_API_KEY  # Credencial exigida pela API.
         )
+        self.__init__(session_id)
 
     def __init__(self, session_id: str) -> None:
         """
