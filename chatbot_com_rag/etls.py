@@ -9,8 +9,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
-import duckdb
-import pandas as pd
 from datetime import datetime
 from pathlib import Path
 
@@ -141,79 +139,5 @@ def etl_text_process() -> list[Document]:
     )
 
     chunks = text_splitter.split_documents(docs_with_metadata)
-
-    return chunks
-
-
-def etl_db_process() -> list[Document]:
-    """
-    Extrai e transforma dados de um banco DuckDB em documentos.
-
-    Returns:
-        Lista de documentos prontos para indexação.
-    """
-
-    # Extração de dados: cria um banco em memória para exemplo.
-    connection = duckdb.connect(database=':memory:')
-    connection.execute("""
-        CREATE TABLE produtos (
-            id INTEGER,
-            nome VARCHAR,
-            categoria VARCHAR,
-            preco FLOAT,
-            estoque INTEGER,
-            descricao TEXT
-        );
-    """)
-
-    produtos_df = pd.DataFrame({
-        'id': [1, 2, 3],
-        'nome': ['Produto A', 'Produto B', 'Produto C'],
-        'categoria': ['Eletrônicos', 'Roupas', 'Alimentos'],
-        'preco': [199.99, 49.99, 9.99],
-        'estoque': [100, 200, 300],
-        'descricao': [
-            'Um smartphone de última geração com tela AMOLED e câmera de alta resolução.',
-            'Uma camiseta de algodão confortável disponível em várias cores.',
-            'Um pacote de biscoitos deliciosos feitos com ingredientes naturais.'
-        ]
-    })
-
-    # Registra DataFrame e popula a tabela.
-    connection.register("produtos_df", produtos_df)
-    connection.execute("INSERT INTO produtos SELECT * FROM produtos_df")
-
-    # print("Tabela 'produtos' criada e populada no DuckDB.")
-
-    # Transformação de dados (metadados adicionais por produto).
-    df_products = connection.execute("SELECT * FROM produtos").fetchdf()
-
-    docs_with_metadata = []
-    for _, row in df_products.iterrows():
-        metadata = {
-            "id_doc": f"produto_{row['id']}",
-            "source": "tabela_produtos_duckdb",
-            "id_produto": row['id'],
-            "categoria": row['categoria'],
-            "preco": row['preco'],
-            "page_number": "N/A",
-            "timestamp": datetime.now().strftime("%Y-%m-%d"),
-            "data_owner": "Departamento de Vendas"
-        }
-        docs_with_metadata.append(Document(page_content=row['descricao'], metadata=metadata))
-
-    # print("Total de documentos com metadata:", len(docs_with_metadata))
-
-    # Fecha conexão após uso para liberar recursos.
-    connection.close()
-
-    # Transformação de dados (chunking) para indexação.
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=50,
-    )
-
-    chunks = text_splitter.split_documents(docs_with_metadata)
-    # print("Total de chunks gerados:", len(chunks))
 
     return chunks
