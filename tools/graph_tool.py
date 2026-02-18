@@ -1,4 +1,4 @@
-from langgraph.graph import StateGraph, START, add_messages
+from langgraph.graph import StateGraph, START, END, add_messages
 from langgraph.graph.state import RunnableConfig
 from langchain.tools import tool, ToolRuntime
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
@@ -140,9 +140,9 @@ def router(state: ToolState) -> Literal["tool_node", "__end__"]:
 
     llm_response = state["messages"][-1]
     if getattr(llm_response, "tool_calls", None):
-        return "tool_node"
+        return GraphType.TOOL_NODE.value
 
-    return "__end__"
+    return END
 
 
 @tool(args_schema=QuestionInputDTO)
