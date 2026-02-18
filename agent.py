@@ -3,18 +3,18 @@ from rich import print
 from langchain.chat_models import init_chat_model
 from langchain.agents import create_agent
 from guardrails_security import GuardrailsSecurity
-from langgraph.checkpoint.memory import InMemorySaver
 from langchain.agents.middleware import ModelRequest, dynamic_prompt
 from langchain.agents.middleware import ModelCallLimitMiddleware
-from rags.singleton_training import RagSingletonTraining
+# from rags.singleton_training import RagSingletonTraining
 from dtos import MainContext, ResponseSchema
-from utils import get_prompt
+from utils import get_prompt, checkpointer
 from tools import (
     dataframe_informations_tool,
     statistical_summary_tool,
     graph_generator_tool,
     dataframe_python_tool,
     multimodal_inputs_tool,
+    graph_tool,
     rag_tool
 )
 
@@ -73,7 +73,7 @@ class Agent:
         self.__llm = init_chat_model(model="google_genai:gemini-2.5-flash-lite")
         self.__session_id: str = None
         self.__chain = self.__build_tool_agent()
-        RagSingletonTraining()
+        # RagSingletonTraining()
 
     @staticmethod
     def get_instance(session_id: str) -> "Agent":
@@ -101,10 +101,9 @@ class Agent:
             graph_generator_tool,
             dataframe_python_tool,
             multimodal_inputs_tool,
+            graph_tool,
             rag_tool
         ]
-
-        checkpointer = InMemorySaver()
 
         return create_agent(
             self.__llm,

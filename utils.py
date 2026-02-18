@@ -1,6 +1,9 @@
 import os
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
+from langgraph.checkpoint.memory import InMemorySaver
+
+checkpointer = InMemorySaver()
 
 
 def get_prompt(template_name: str) -> str:

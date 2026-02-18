@@ -1,4 +1,6 @@
 from agent import Agent
+from rich import print
+from rich.markdown import Markdown
 
 
 def main(question: str):
@@ -10,7 +12,8 @@ def main(question: str):
 
     try:
         response = agent.invoke(question)
-        print(f"Resposta: {response}")
+        print(Markdown(response))
+        print(Markdown("---"))
     except Exception as e:
         print(f"Erro ao processar a pergunta: {e}")
 
@@ -29,7 +32,7 @@ if __name__ == "__main__":
         if not question:
             print("Por favor, digite uma pergunta válida.")
             continue
-        if question.lower() in {"sair", "exit", "quit"}:
+        if question.lower() in {"sair", "exit", "quit", "q"}:
             print("Encerrando o chatbot.")
             break
 
