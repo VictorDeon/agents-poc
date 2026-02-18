@@ -9,13 +9,9 @@ def main(question: str):
     """
 
     agent = Agent.get_instance(session_id="default")
-
-    try:
-        response = agent.invoke(question)
-        print(Markdown(response))
-        print(Markdown("---"))
-    except Exception as e:
-        print(f"Erro ao processar a pergunta: {e}")
+    response = agent.invoke(question)
+    print(Markdown(response))
+    print(Markdown("---"))
 
 
 if __name__ == "__main__":
