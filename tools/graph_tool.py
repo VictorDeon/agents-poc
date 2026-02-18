@@ -36,6 +36,9 @@ def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
     Args:
         question: A pergunta do usuário relacionada a informações gerais do DataFrame.
         runtime: O contexto de execução da ferramenta, fornecido pelo agente.
+
+    Returns:
+        A resposta gerada pelo modelo de linguagem, baseada na pergunta do usuário e no contexto da conversa.
     """
 
     context = runtime.context
@@ -53,8 +56,9 @@ def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
 
     graph = builder.compile(checkpointer=checkpointer)
 
+    # Usar thread_id isolado para evitar conflito de estrutura com o agente principal
     config = RunnableConfig(
-        configurable={"thread_id": context.session_id}
+        configurable={"thread_id": f"graph_tool_{context.session_id}"}
     )
 
     result = graph.invoke(
@@ -63,4 +67,7 @@ def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
         context=context
     )
 
-    return result
+    # Pegar somente o texto de resposta
+    answer = result["messages"][0].content if result["messages"] else "Desculpe, não consegui gerar uma resposta."
+
+    return answer
