@@ -6,20 +6,21 @@ from langgraph.checkpoint.memory import InMemorySaver
 checkpointer = InMemorySaver()
 
 
-def get_prompt(template_name: str) -> str:
+def get_prompt(template_name: str, context: dict = {}) -> str:
     """
     Carrega e renderiza um template Jinja2 a partir da pasta de prompts.
 
     Args:
         template_name: Nome do arquivo do template (ex.: "meu_prompt.md").
+        context: Dicionário com variáveis para renderizar o template.
     Returns:
         String com o template renderizado.
     """
 
     # Define o loader para a pasta de prompts do projeto.
     env = Environment(loader=FileSystemLoader("prompts"))
-    # Renderiza o template sem variáveis adicionais (render padrão).
-    return env.get_template(template_name).render()
+    # Renderiza o template com as variáveis fornecidas no contexto.
+    return env.get_template(template_name).render(context)
 
 
 def load_environment_variables() -> None:

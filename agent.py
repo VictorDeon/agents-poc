@@ -29,23 +29,25 @@ def agent_system_prompt(request: ModelRequest) -> str:
     sentiment = request.runtime.context.sentiment
 
     # Exemplo de personalização: ajustar o tom do agente com base no sentimento detectado.
-    tone_instruction = "Tom de Voz: "
     if sentiment == "negative":
-        tone_instruction += "Responda de forma empática e compreensiva."
+        tone_instruction = "Responda de forma empática e compreensiva."
     elif sentiment == "positive":
-        tone_instruction += "Mantenha um tom entusiástico e amigável."
+        tone_instruction = "Mantenha um tom entusiástico e amigável."
     elif sentiment == "expert":
-        tone_instruction += "Responda de forma técnica e detalhada, adequada para um público especializado."
+        tone_instruction = "Responda de forma técnica e detalhada, adequada para um público especializado."
     elif sentiment == "beginner":
-        tone_instruction += "Responda de forma simples e didática, adequada para um público iniciante com analogias simples."
+        tone_instruction = "Responda de forma simples e didática, adequada para um público iniciante com analogias simples."
     elif sentiment == "baby":
-        tone_instruction += "Responda de forma extremamente simples e lúdica, adequada para uma criança pequena, usando analogias divertidas e linguagem muito acessível."
+        tone_instruction = "Responda de forma extremamente simples e lúdica, adequada para uma criança pequena, usando analogias divertidas e linguagem muito acessível."
     else:
-        tone_instruction += "Responda de forma clara e profissional."
+        tone_instruction = "Responda de forma clara e profissional."
 
     # Carrega o prompt base do sistema e injeta a instrução de tom personalizada.
-    base_prompt = get_prompt('agent_system.prompt.md')
-    full_prompt = f"{base_prompt}\n\n{tone_instruction}"
+    tools_by_name = {tool.name: tool for tool in request.tools}
+    full_prompt = get_prompt('agent_system.prompt.md', context={
+            "tone_instruction": tone_instruction,
+            "tools": tools_by_name
+    })
 
     return full_prompt
 
