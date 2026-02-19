@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
 from typing import AsyncGenerator
 from rich import print
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from contextlib import asynccontextmanager
 
@@ -49,7 +50,7 @@ def get_env_var(key: str, default: str | None = None) -> str | None:
 
 
 @asynccontextmanager
-async def db_checkpointer() -> AsyncGenerator[AsyncPostgresSaver, None]:
+async def db_checkpointer() -> AsyncGenerator[AsyncPostgresSaver | InMemorySaver, None]:
     """
     Lifespan para carregar variáveis de ambiente e realizar outras tarefas de setup.
     """
@@ -58,8 +59,12 @@ async def db_checkpointer() -> AsyncGenerator[AsyncPostgresSaver, None]:
 
     load_environment_variables()
 
-    async with AsyncPostgresSaver.from_conn_string(get_env_var("DB_DSN")) as checkpointer:
-        await checkpointer.setup()
-        yield checkpointer
+    try:
+        async with AsyncPostgresSaver.from_conn_string(get_env_var("DB_DSN")) as checkpointer:
+            await checkpointer.setup()
+            yield checkpointer
+    except Exception as e:
+        print(f"Erro ao conectar ao banco de dados: {e}")
+        yield InMemorySaver()  # Fallback para um saver em memória
 
     print("Finalizando chatbot")

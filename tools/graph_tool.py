@@ -1,3 +1,4 @@
+from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.graph import StateGraph, START, END, add_messages
 from langgraph.graph.state import RunnableConfig
 from langgraph.prebuilt.tool_node import ToolNode, tools_condition
@@ -8,73 +9,6 @@ from enum import Enum
 from dtos import MainContext, QuestionInputDTO
 from typing import TypedDict, Annotated, Sequence
 from rich import print
-
-
-@tool
-def multiply_subtool(a: float, b: float) -> float:
-    """
-    Multiplica dois números.
-
-    Args:
-        a: O primeiro número.
-        b: O segundo número.
-
-    Returns:
-        O resultado da multiplicação de a e b.
-    """
-
-    return a * b
-
-
-@tool
-def add_subtool(a: float, b: float) -> float:
-    """
-    Soma dois números.
-
-    Args:
-        a: O primeiro número.
-        b: O segundo número.
-
-    Returns:
-        O resultado da soma de a e b.
-    """
-
-    return a + b
-
-
-@tool
-def subtract_subtool(a: float, b: float) -> float:
-    """
-    Subtrai dois números.
-
-    Args:
-        a: O primeiro número.
-        b: O segundo número.
-
-    Returns:
-        O resultado da subtração de a e b.
-    """
-
-    return a - b
-
-
-@tool
-def divide_subtool(a: float, b: float) -> float:
-    """
-    Divide dois números.
-
-    Args:
-        a: O primeiro número (dividendo).
-        b: O segundo número (divisor).
-
-    Returns:
-        O resultado da divisão de a por b, ou uma mensagem de erro se b for zero.
-    """
-
-    if b == 0:
-        return "Divisão por zero não é permitida."
-
-    return a / b
 
 
 class GraphType(Enum):
@@ -88,25 +22,32 @@ class ToolState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
-TOOLS = [multiply_subtool, add_subtool, subtract_subtool, divide_subtool]
-
-
-def call_llm(state: ToolState) -> ToolState:
+def create_call_llm_node(tools: list):
     """
-    Node que carrega a llm com as ferramentas matemáticas.
+    Factory function que cria o nó call_llm com as ferramentas.
+
+    Args:
+        tools: Lista de ferramentas a serem vinculadas ao modelo.
+
+    Returns:
+        Função que executa o nó call_llm com as ferramentas fornecidas.
     """
 
-    llm = init_chat_model(model="google_genai:gemini-2.5-flash-lite")
-    llm_with_tools = llm.bind_tools(TOOLS)
-    llm_result = llm_with_tools.invoke(state["messages"])
-    return ToolState(messages=[llm_result])
+    def call_llm(state: ToolState) -> ToolState:
+        """
+        Node que carrega a llm com as ferramentas matemáticas.
+        """
 
+        llm = init_chat_model(model="google_genai:gemini-2.5-flash-lite")
+        llm_with_tools = llm.bind_tools(tools)
+        llm_result = llm_with_tools.invoke(state["messages"])
+        return ToolState(messages=[llm_result])
 
-tool_node = ToolNode(tools=TOOLS)
+    return call_llm
 
 
 @tool(args_schema=QuestionInputDTO)
-def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
+async def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
     """
     Utilize esta ferramenta SEMPRE que o usuário pedir alguma conta matemática básica como
     soma, multiplicação, divisão ou subtração.
@@ -129,10 +70,27 @@ def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
 
     context = runtime.context
 
+    client = MultiServerMCPClient(
+        {
+            "math": {
+                "command": "python",
+                "args": ["mcp-server/server.py"],
+                "transport": "stdio",
+            }
+        }
+    )
+
+    tools = await client.get_tools()
+
     builder = StateGraph(ToolState, context_schema=MainContext)
 
+    # Criar o nó call_llm com as ferramentas
+    call_llm_node = create_call_llm_node(tools)
+
+    tool_node = ToolNode(tools=tools)
+
     # Adicionando os nós
-    builder.add_node(GraphType.CALL_LLM.value, call_llm)
+    builder.add_node(GraphType.CALL_LLM.value, call_llm_node)
     builder.add_node(GraphType.TOOL_NODE.value, tool_node)
 
     # Adicionando as arestas
@@ -151,7 +109,7 @@ def graph_tool(question: str, runtime: ToolRuntime[MainContext]) -> str:
         configurable={"thread_id": f"graph_tool_{context.session_id}"}
     )
 
-    result = graph.invoke(
+    result = await graph.ainvoke(
         {"messages": [
             SystemMessage(content="""
                 Você é um assistente matemático. Após executar as ferramentas matemáticas,

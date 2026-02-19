@@ -39,3 +39,5 @@ pip install -r requirements.txt
 uvicorn api.main:app --reload
 ```
 4. O servidor estará disponível em `http://localhost:8000`. Use os endpoints descritos para interagir com o chatbot simulado.
+
+5. Rodar o servidor mcp com inspect: `npx @modelcontextprotocol/inspector uv run --with mcp mcp run mcp-server/server.py` ou sem o inspect: `uv run --with mcp mcp run mcp-server/server.py` (recomendo usar o inspect para facilitar o desenvolvimento).
